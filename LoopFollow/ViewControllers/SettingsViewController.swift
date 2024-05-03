@@ -98,7 +98,7 @@ class SettingsViewController: FormViewController {
        if isTestFlightBuild() {
           expirationHeaderString = "Beta (TestFlight) Expiration"
        }
-                        
+       
         form
         +++ Section(header: "Data Settings", footer: "")
        <<< SegmentedRow<String>("units") { row in
@@ -128,21 +128,29 @@ class SettingsViewController: FormViewController {
            guard let value = row.value else {
                UserDefaultsRepository.url.value = ""
                self.showHideNSDetails()
-               return }
-           // check the format of the URL entered by the user and trim away any spaces or "/" at the end
-           var urlNSInput = value.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-           if urlNSInput.last == "/" {
-               urlNSInput = String(urlNSInput.dropLast())
+               return
            }
-           UserDefaultsRepository.url.value = urlNSInput.lowercased()
-           // set the row value back to the correctly formatted URL so that the user immediately sees how it should have been written
-           row.value = UserDefaultsRepository.url.value
+           
+           // Normalize input: remove unwanted characters and lowercase
+           let filtered = value.replacingOccurrences(of: "[^A-Za-z0-9:/._-]", with: "", options: .regularExpression).lowercased()
+           
+           // Further clean-up: Remove trailing slashes
+           var cleanURL = filtered
+           while cleanURL.last == "/" {
+               cleanURL = String(cleanURL.dropLast())
+           }
+           
+           // Set the cleaned URL
+           UserDefaultsRepository.url.value = cleanURL
+           row.value = cleanURL
+           
            self.showHideNSDetails()
            globalVariables.nsVerifiedAlert = 0
            
            // Verify Nightscout URL and token
            self.checkNightscoutStatus()
        }
+
        <<< TextRow() { row in
            row.title = "NS Token"
            row.placeholder = "Leave blank if not using tokens"
@@ -174,7 +182,7 @@ class SettingsViewController: FormViewController {
            row.tag = "loopUser"
            row.value = UserDefaultsRepository.loopUser.value
            row.hidden = "$showNS == false"
-       }.onChange { [weak self] row in
+       }.onChange { row in
                    guard let value = row.value else { return }
                    UserDefaultsRepository.loopUser.value = value
            }
@@ -182,7 +190,7 @@ class SettingsViewController: FormViewController {
        <<< SwitchRow("showDex"){ row in
        row.title = "Show Dexcom Settings"
        row.value = UserDefaultsRepository.showDex.value
-       }.onChange { [weak self] row in
+       }.onChange { row in
                guard let value = row.value else { return }
                UserDefaultsRepository.showDex.value = value
        }
@@ -288,13 +296,23 @@ class SettingsViewController: FormViewController {
         }
 
        +++ Section(header: getAppVersion(), footer: "")
-
-       +++ Section(header: expirationHeaderString, footer: String(expiration.description))
-
-        showHideNSDetails()
+       
+       if !isMacApp() {
+           form +++ Section(header: expirationHeaderString, footer: String(expiration.description))
+       }
+       
+       showHideNSDetails()
        checkNightscoutStatus()
     }
     
+    func isMacApp() -> Bool {
+#if targetEnvironment(macCatalyst)
+        return true
+#else
+        return false
+#endif
+    }
+
     func getAppVersion() -> String {
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
             return "App Version: \(version)"
